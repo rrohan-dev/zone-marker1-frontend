@@ -3,64 +3,144 @@
 <head>
   <title>Zone Marker – Bengaluru Safety Map</title>
   <style>
-    body { font-family: Arial, sans-serif; }
+    body { font-family: Arial, sans-serif; margin: 0; }
     #map { height: 90vh; width: 100%; }
-    h2 { text-align: center; }
+    h2 { text-align: center; margin: 10px 0; }
+    #legend { background: white; padding: 10px; margin: 10px; border: 1px solid #ccc; }
+    #filters { margin: 10px; text-align: center; }
   </style>
-
-  <!-- Google Maps API -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBOiTiY3D_cD3YrfeI88wlm5WseXjQ5rVo"></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBOiTiY3D_cD3YrfeI88wlm5WseXjQ5rVo&libraries=places"></script>
 </head>
 <body>
-
 <h2>Zone Marker – Bengaluru</h2>
+
+<div id="filters">
+  <label>Filter Zone:
+    <select id="zoneFilter">
+      <option value="all">All</option>
+      <option value="green">Safe</option>
+      <option value="orange">Caution</option>
+      <option value="red">High Risk</option>
+    </select>
+  </label>
+  <button onclick="locateUser()">Find Nearest Police Station</button>
+</div>
+
 <div id="map"></div>
+<div id="legend">
+  <h3>Zone Legend</h3>
+  <p><span style="color:red;">🔴</span> High Risk</p>
+  <p><span style="color:orange;">🟠</span> Caution</p>
+  <p><span style="color:green;">🟢</span> Safe</p>
+</div>
 
 <script>
+let map;
+let markers = [];
+let circles = [];
+
 async function initMap() {
-  const map = new google.maps.Map(document.getElementById("map"), {
+  map = new google.maps.Map(document.getElementById("map"), {
     center: { lat: 12.9716, lng: 77.5946 },
     zoom: 12,
   });
+
+  map.controls[google.maps.ControlPosition.RIGHT_TOP].push(document.getElementById('legend'));
+
+  loadZones();
+
+}
+
+async function loadZones(filter="all") {
+  // Remove previous markers/circles
+  markers.forEach(m => m.setMap(null));
+  circles.forEach(c => c.setMap(null));
+  markers = [];
+  circles = [];
 
   const response = await fetch("https://zone-marker-backend.onrender.com/zones");
   const zones = await response.json();
 
   zones.forEach(zone => {
-    let color = "#00FF00";
-    if (zone.zone === "red") color = "#FF0000";
-    else if (zone.zone === "orange") color = "#FFA500";
+    if(filter !== "all" && zone.zone !== filter) return;
 
-    new google.maps.Circle({
+    let color = "#00FF00";
+    if(zone.zone === "red") color = "#FF0000";
+    else if(zone.zone === "orange") color = "#FFA500";
+
+    // Circle
+    const circle = new google.maps.Circle({
       strokeColor: color,
       fillColor: color,
       fillOpacity: 0.35,
       map,
-      center: { lat: zone.latitude, lng: zone.longitude },
+      center: { lat: zone.lat, lng: zone.lng },
       radius: 800
+    });
+    circles.push(circle);
+
+    // Marker
+    const marker = new google.maps.Marker({
+      position: { lat: zone.lat, lng: zone.lng },
+      map
     });
 
     const info = new google.maps.InfoWindow({
       content: `
-        <strong>${zone.area}</strong><br>
+        <strong>${zone.zone_name}</strong><br>
         Zone: ${zone.zone.toUpperCase()}<br>
-        Cases: ${zone.cases}<br>
-        Risk Probability: ${zone.probability}
+        Risk Score: ${zone.risk_score}/100<br>
+        Registered Cases: ${zone.registered}<br>
+        Estimated Unreported: ${zone.unreported_est}
       `
     });
 
-    const marker = new google.maps.Marker({
-      position: { lat: zone.latitude, lng: zone.longitude },
-      map
-    });
-
     marker.addListener("click", () => info.open(map, marker));
+    markers.push(marker);
   });
+}
+
+document.getElementById("zoneFilter").addEventListener("change", (e) => {
+  loadZones(e.target.value);
+});
+
+// NEAREST POLICE STATION
+function locateUser() {
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(position => {
+      const userLocation = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+      };
+      map.setCenter(userLocation);
+      map.setZoom(14);
+
+      const service = new google.maps.places.PlacesService(map);
+      service.nearbySearch({
+        location: userLocation,
+        radius: 3000,
+        type: ['police']
+      }, (results, status) => {
+        if(status === google.maps.places.PlacesServiceStatus.OK){
+          results.forEach(place => {
+            new google.maps.Marker({
+              position: place.geometry.location,
+              map,
+              icon: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+              title: place.name
+            });
+          });
+          alert(`Found ${results.length} police stations nearby`);
+        }
+      });
+
+    });
+  } else {
+    alert("Geolocation not supported by your browser.");
+  }
 }
 
 window.onload = initMap;
 </script>
-
 </body>
 </html>
-
