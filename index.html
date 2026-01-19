@@ -58,7 +58,7 @@ async function loadZones(filter="all") {
   markers = [];
   circles = [];
 
-  const response = await fetch("https://zone-marker-backend.onrender.com/zones");
+  const response = await fetch("https://zone-marker-backend-2.onrender.com/zones");
   const zones = await response.json();
 
   zones.forEach(zone => {
@@ -144,3 +144,4 @@ window.onload = initMap;
 </script>
 </body>
 </html>
+
